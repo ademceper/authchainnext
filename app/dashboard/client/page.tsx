@@ -1,13 +1,13 @@
 import DashboardLayout from "../page";
+import ClientComponent from "@/components/client-component";
 
 export default function ClientPage() {
   return (
-    <DashboardLayout>
-      <div className="p-6">
-        <h1 className="text-2xl font-semibold mb-4">Client Page</h1>
-        <p>Welcome to the client section of the dashboard!</p>
-        {/* Buraya istediğiniz içeriği ekleyebilirsiniz */}
-      </div>
+    <DashboardLayout 
+      pageTitle="Client Management" 
+      description="Manage and view all client-related information and activities."
+    >
+        <ClientComponent/>
     </DashboardLayout>
   );
 }

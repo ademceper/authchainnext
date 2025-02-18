@@ -40,10 +40,7 @@ export class RealmService {
     try {
       await prisma.realm.update({
         where: { id: data.id },
-        data: {
-          name: data.name,
-          description: data.description,
-        },
+        data,
       });
 
       return { success: true, message: "Realm updated successfully." }; 
