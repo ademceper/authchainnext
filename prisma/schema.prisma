@@ -1,0 +1,182 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id                String        @id @default(uuid()) // UUID olarak id
+  username          String        @unique // Kullanıcı adı
+  email             String        @unique // E-posta
+  passwordHash      String        // Şifre hash'lenmiş
+  emailVerified     Boolean       @default(false) // E-posta doğrulama durumu
+  isActive          Boolean       @default(true) // Hesap durumu
+  lastLogin         DateTime?     // Son giriş tarihi
+  createdAt         DateTime      @default(now()) // Oluşturulma tarihi
+  updatedAt         DateTime      @updatedAt // Güncellenme tarihi
+  role              UserRole      @default(USER) // Kullanıcı rolü
+  lastPasswordReset DateTime?     // Son şifre sıfırlama zamanı
+  realmId           String      // Realm ile ilişki
+  realm             Realm         @relation(fields: [realmId], references: [id])
+
+  sessions          Session[]
+  oAuthTokens       OAuthToken[]
+  authorizationCodes AuthorizationCode[]
+  clients           Client[] @relation("ClientUsers") 
+  refreshTokens     RefreshToken[]
+  accessTokens      AccessToken[]
+  idTokens          IDToken[]
+  permissions       Permission[] @relation("UserPermissions")
+  activities        Activity[]
+  consents          Consent[]
+}
+
+model Session {
+  id        String   @id @default(uuid()) // UUID olarak id
+  userId    String   // Kullanıcı ID'si
+  createdAt DateTime @default(now()) // Oturum açılma tarihi
+  expiresAt DateTime // Oturumun sona erme tarihi
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model OAuthToken {
+  id            String   @id @default(uuid()) // UUID olarak id
+  accessToken   String   @unique // Erişim token'ı
+  refreshToken  String?  // Yenileme token'ı
+  expiresAt     DateTime // Erişim token'ının bitiş tarihi
+  scope         String[] // OAuth kapsamları
+  userId        String   // Kullanıcı ID'si
+  user          User     @relation(fields: [userId], references: [id])
+}
+
+model AuthorizationCode {
+  id        String   @id @default(uuid()) // UUID olarak id
+  code      String   @unique // Authorization kodu
+  clientId  String   // İstemci ID'si
+  redirectUri String  // Yönlendirme URI'si
+  expiresAt DateTime // Kodun geçerlilik süresi
+  codeChallenge String // PKCE code challenge
+  codeChallengeMethod String // PKCE code challenge method
+  userId    String   // Kullanıcı
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model Client {
+  id               String   @id @default(uuid()) // UUID olarak id
+  clientId         String   @unique // OAuth istemci ID'si
+  clientSecret     String   // OAuth istemci secret'ı
+  redirectUris     String[] // Yönlendirme URI'leri
+  grantTypes       GrantType[] // İzin verilen grant türleri
+  responseTypes    String[] // Yanıt türleri (code, token, id_token)
+  pkceRequired     Boolean  @default(true) // PKCE gerekliliği
+  createdAt        DateTime @default(now()) // Oluşturulma tarihi
+  updatedAt        DateTime @updatedAt // Güncellenme tarihi
+
+  // Realm ile ilişkilendirme
+  realmId          String
+  realm            Realm   @relation(fields: [realmId], references: [id])
+
+  consent          Consent[]
+  authorizedUsers  User[]   @relation("ClientUsers")
+  accessTokens    AccessToken[]
+  idTokens        IDToken[]
+}
+
+model Realm {
+  id            String   @id @default(uuid()) // UUID olarak id
+  name          String   @unique // Realm adı
+  createdAt     DateTime @default(now()) // Oluşturulma tarihi
+  updatedAt     DateTime @updatedAt // Güncellenme tarihi
+  description   String? // Realm açıklaması (isteğe bağlı)
+
+  users         User[]
+  clients       Client[]
+  permissions   Permission[]
+}
+
+model RefreshToken {
+  id            String   @id @default(uuid()) // UUID olarak id
+  token         String   @unique // Yenileme token'ı
+  expiresAt     DateTime // Yenileme token'ının bitiş tarihi
+  userId        String   // Kullanıcı ID'si
+  user          User     @relation(fields: [userId], references: [id])
+}
+
+model AccessToken {
+  id            String   @id @default(uuid()) // UUID olarak id
+  token         String   @unique // Erişim token'ı
+  expiresAt     DateTime // Erişim token'ının bitiş tarihi
+  userId        String   // Kullanıcı ID'si
+  clientId      String   // İstemci ID'si
+  user          User     @relation(fields: [userId], references: [id])
+  client        Client   @relation(fields: [clientId], references: [id])
+}
+
+model IDToken {
+  id            String   @id @default(uuid()) // UUID olarak id
+  token         String   @unique // ID token'ı
+  expiresAt     DateTime // ID token'ının bitiş tarihi
+  userId        String   // Kullanıcı ID'si
+  clientId      String   // İstemci ID'si
+  user          User     @relation(fields: [userId], references: [id])
+  client        Client   @relation(fields: [clientId], references: [id])
+}
+
+model Consent {
+  id          String   @id @default(uuid()) // UUID olarak id
+  granted     Boolean  // Onay durumu (true/false)
+  grantedAt   DateTime @default(now()) // Onay tarihi
+  clientId    String   // İstemci ID'si
+  userId      String   // Kullanıcı ID'si
+  client      Client   @relation(fields: [clientId], references: [id])
+  user        User     @relation(fields: [userId], references: [id])
+}
+
+model Activity {
+  id        String   @id @default(uuid()) // UUID olarak id
+  action    String   // Etkinlik açıklaması
+  timestamp DateTime @default(now()) // Etkinlik zamanı
+  userId    String   // Kullanıcı ID'si
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model Permission {
+  id        String   @id @default(uuid()) // UUID olarak id
+  name      String   @unique // İzin adı (örneğin: "read", "write", "admin")
+  createdAt DateTime @default(now()) // Oluşturulma tarihi
+  realmId   String
+  realm     Realm   @relation(fields: [realmId], references: [id])
+
+  users     User[]   @relation("UserPermissions")
+}
+
+enum UserRole {
+  ADMIN
+  USER
+  SUPER_ADMIN
+}
+
+// OAuth Grant Types
+enum GrantType {
+  AUTHORIZATION_CODE
+  CLIENT_CREDENTIALS
+  PASSWORD
+  IMPLICIT
+}
+
+// OpenID Connect Response Types
+enum ResponseType {
+  CODE
+  TOKEN
+  ID_TOKEN
+  CODE_ID_TOKEN
+}
+
+// OAuth PKCE (Proof Key for Code Exchange)
+enum CodeChallengeMethod {
+  S256
+  PLAINTEXT
+}
