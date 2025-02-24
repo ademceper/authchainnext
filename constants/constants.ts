@@ -31,6 +31,17 @@ export const navMain = [
     ],
   },
   {
+    title: "Realms",
+    url: "realm",
+    icon: SquareTerminal,
+    isActive: true,
+    items: [
+      { title: "History", url: "#" },
+      { title: "Starred", url: "#" },
+      { title: "Settings", url: "#" },
+    ],
+  },
+  {
     title: "Users",
     url: "#",
     icon: Bot,

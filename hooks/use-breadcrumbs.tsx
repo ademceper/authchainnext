@@ -17,9 +17,18 @@ export function useBreadcrumbs() {
 
     const segments = pathname.split('/').filter(Boolean);
 
+    if (segments.length === 1 && segments[0] === 'overview') {
+      return [
+        {
+          title: <Home className="w-5 h-5 mr-2" />,
+          link: '/overview'
+        }
+      ];
+    }
+
     const homeBreadcrumb: BreadcrumbItem = {
       title: <Home className="w-5 h-5 mr-2" />, 
-      link: '/' 
+      link: '/overview' 
     };
 
     const dynamicBreadcrumbs = segments.map((segment, index) => {

@@ -8,156 +8,350 @@ generator client {
 }
 
 model User {
-  id                String        @id @default(uuid()) // UUID olarak id
-  username          String        @unique // Kullanıcı adı
-  email             String        @unique // E-posta
-  passwordHash      String        // Şifre hash'lenmiş
+  id                String        @id @default(uuid()) // Benzersiz kullanıcı kimliği (UUID)
+  username          String        @unique // Kullanıcı adı (Benzersiz)
+  email             String        @unique // E-posta (Benzersiz)
+  passwordHash      String        // Hash'lenmiş şifre
   emailVerified     Boolean       @default(false) // E-posta doğrulama durumu
-  isActive          Boolean       @default(true) // Hesap durumu
-  lastLogin         DateTime?     // Son giriş tarihi
-  createdAt         DateTime      @default(now()) // Oluşturulma tarihi
-  updatedAt         DateTime      @updatedAt // Güncellenme tarihi
-  role              UserRole      @default(USER) // Kullanıcı rolü
-  lastPasswordReset DateTime?     // Son şifre sıfırlama zamanı
-  realmId           String      // Realm ile ilişki
-  realm             Realm         @relation(fields: [realmId], references: [id])
+  phoneNumber       String?       @unique // Telefon numarası (isteğe bağlı)
+  phoneVerified     Boolean       @default(false) // Telefon doğrulama durumu
+  twoFactorEnabled  Boolean       @default(false) // 2FA etkin mi?
+  twoFactorSecret   String?       // 2FA için gizli anahtar (isteğe bağlı)
+  profileImageUrl   String?       // Kullanıcı profil resmi URL'si
 
-  sessions          Session[]
-  oAuthTokens       OAuthToken[]
-  authorizationCodes AuthorizationCode[]
-  clients           Client[] @relation("ClientUsers") 
-  refreshTokens     RefreshToken[]
-  accessTokens      AccessToken[]
-  idTokens          IDToken[]
-  permissions       Permission[] @relation("UserPermissions")
-  activities        Activity[]
-  consents          Consent[]
+  isActive          Boolean       @default(true) // Kullanıcı hesabı aktif mi?
+  isLocked          Boolean       @default(false) // Hesap kilitli mi?
+  lockReason        String?       // Hesap neden kilitlendi? (isteğe bağlı)
+
+  lastLogin         DateTime?     // Son başarılı giriş tarihi
+  lastFailedLogin   DateTime?     // Son başarısız giriş tarihi
+  failedLoginAttempts Int         @default(0) // Başarısız giriş deneme sayısı
+  lastLoginIp       String?       // Son giriş yapılan IP adresi
+  lastLoginUserAgent String?      // Son giriş yapan cihaz / tarayıcı bilgisi
+
+  createdAt         DateTime      @default(now()) // Hesabın oluşturulma tarihi
+  updatedAt         DateTime      @updatedAt // Güncellenme tarihi
+  deletedAt         DateTime?     // Hesap silinme tarihi (yumuşak silme)
+
+  roles  UserRole[]
+  lastPasswordReset DateTime?     // Son şifre sıfırlama zamanı
+
+  realmId           String        // Realm ID
+  realm             Realm         @relation(fields: [realmId], references: [id]) // Kullanıcının ait olduğu Realm
+
+  birthDate         DateTime?     // Kullanıcının doğum tarihi (isteğe bağlı)
+  gender           Gender?        // Cinsiyet
+
+  sessions          Session[]     // Kullanıcının oturumları
+  oAuthTokens       OAuthToken[]  // OAuth token'ları
+  authorizationCodes AuthorizationCode[] // Yetkilendirme kodları
+  clients           Client[] @relation("ClientUsers") // Kullanıcının bağlı olduğu OAuth istemcileri
+  refreshTokens     RefreshToken[] // Yenileme token'ları
+  accessTokens      AccessToken[] // Erişim token'ları
+  idTokens          IDToken[] // ID token'ları
+  permissions       Permission[] @relation("UserPermissions") // Kullanıcının izinleri
+  activities        Activity[] // Kullanıcı aktiviteleri
+  consents          Consent[] // Kullanıcının verdiği izinler
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  UNKNOWN
 }
 
 model Session {
-  id        String   @id @default(uuid()) // UUID olarak id
-  userId    String   // Kullanıcı ID'si
-  createdAt DateTime @default(now()) // Oturum açılma tarihi
-  expiresAt DateTime // Oturumun sona erme tarihi
-  user      User     @relation(fields: [userId], references: [id])
+  id            String   @id @default(uuid()) // Oturum kimliği (UUID)
+  userId        String   // Kullanıcı kimliği
+  user          User     @relation(fields: [userId], references: [id]) // Kullanıcı ile ilişki
+
+  createdAt     DateTime @default(now()) // Oturumun başlatıldığı zaman
+  expiresAt     DateTime // Oturumun sona erme zamanı
+  lastUsedAt    DateTime? // Oturumun en son kullanıldığı zaman
+  isActive      Boolean  @default(true) // Oturum aktif mi?
+
+  ipAddress     String?  // Kullanıcının bağlandığı IP adresi
+  userAgent     String?  // Kullanıcının tarayıcı/cihaz bilgisi
+  location      String?  // IP'den elde edilen şehir/ülke bilgisi
+
+  mfaUsed       Boolean  @default(false) // Çok faktörlü kimlik doğrulama kullanıldı mı?
+  mfaMethod     String?  // Kullanılan MFA yöntemi (ör. "TOTP", "SMS", "Email")
+
+  revokedAt     DateTime? // Oturum iptal edildiyse zamanı
+  revokedReason String?   // Oturum neden iptal edildi? (İsteğe bağlı)
+
+  updatedAt     DateTime  @updatedAt // Güncellenme tarihi
 }
 
 model OAuthToken {
-  id            String   @id @default(uuid()) // UUID olarak id
-  accessToken   String   @unique // Erişim token'ı
-  refreshToken  String?  // Yenileme token'ı
-  expiresAt     DateTime // Erişim token'ının bitiş tarihi
-  scope         String[] // OAuth kapsamları
-  userId        String   // Kullanıcı ID'si
-  user          User     @relation(fields: [userId], references: [id])
+  id              String   @id @default(uuid()) // Token kimliği (UUID)
+  accessToken     String   @unique // Erişim token'ı (JWT, Bearer vb.)
+  refreshToken    String?  @unique // Yenileme token'ı (Opsiyonel)
+  
+  userId          String   // Kullanıcı kimliği
+  user            User     @relation(fields: [userId], references: [id]) // Kullanıcı ile ilişki
+  
+  clientId        String   // Token'ı oluşturan istemci kimliği
+  grantType       String   // OAuth grant türü (Authorization Code, Client Credentials, Refresh Token vb.)
+  
+  expiresAt       DateTime // Erişim token'ının geçerlilik süresi
+  lastUsedAt      DateTime? // Token'ın en son kullanıldığı zaman
+  scope           String[] // OAuth kapsamları (ör. ["read", "write"])
+  
+  ipAddress       String?  // Token oluşturulurken kullanılan IP adresi
+  userAgent       String?  // Token'ın hangi cihaz/tarayıcıdan kullanıldığı
+
+  isActive        Boolean  @default(true) // Token hala geçerli mi?
+  revokedAt       DateTime? // Token iptal edildiyse zamanı
+  revokedReason   String?   // Token neden iptal edildi? (İsteğe bağlı)
+  
+  createdAt       DateTime  @default(now()) // Token oluşturulma zamanı
+  updatedAt       DateTime  @updatedAt // Güncellenme tarihi
 }
+
 
 model AuthorizationCode {
-  id        String   @id @default(uuid()) // UUID olarak id
-  code      String   @unique // Authorization kodu
-  clientId  String   // İstemci ID'si
-  redirectUri String  // Yönlendirme URI'si
-  expiresAt DateTime // Kodun geçerlilik süresi
-  codeChallenge String // PKCE code challenge
+  id              String   @id @default(uuid()) // UUID olarak id
+  code            String   @unique // Authorization kodu
+  clientId        String   // İstemci ID'si
+  redirectUri     String   // Yönlendirme URI'si
+  expiresAt       DateTime // Kodun geçerlilik süresi
+  codeChallenge   String   // PKCE code challenge
   codeChallengeMethod String // PKCE code challenge method
-  userId    String   // Kullanıcı
-  user      User     @relation(fields: [userId], references: [id])
+  userId          String   // Kullanıcı
+  state           String?  // (Opsiyonel) CSRF saldırılarını engellemek için state parametresi
+  scope           String?  // (Opsiyonel) Talep edilen izinler (scope)
+  createdAt       DateTime @default(now()) // Kayıt oluşturulma zamanı
+  updatedAt       DateTime @updatedAt // Kayıt güncellenme zamanı
+  isRevoked       Boolean  @default(false) // Kodu iptal etme durumu
+  ipAddress       String?  // (Opsiyonel) Kullanıcının IP adresi
+  user            User     @relation(fields: [userId], references: [id])
+  client          Client   @relation(fields: [clientId], references: [id]) // Client modeline ilişkin bir ilişki
 }
 
+
 model Client {
-  id               String   @id @default(uuid()) // UUID olarak id
-  clientId         String   @unique // OAuth istemci ID'si
-  clientSecret     String   // OAuth istemci secret'ı
-  redirectUris     String[] // Yönlendirme URI'leri
-  grantTypes       GrantType[] // İzin verilen grant türleri
-  responseTypes    String[] // Yanıt türleri (code, token, id_token)
-  pkceRequired     Boolean  @default(true) // PKCE gerekliliği
-  createdAt        DateTime @default(now()) // Oluşturulma tarihi
-  updatedAt        DateTime @updatedAt // Güncellenme tarihi
+  id                          String   @id @default(uuid()) // UUID olarak id
+  clientId                    String   @unique // OAuth istemci ID'si
+  clientSecret                String   // OAuth istemci secret'ı
+  redirectUris                String[] // Yönlendirme URI'leri
+  grantTypes                  GrantType[] // İzin verilen grant türleri
+  responseTypes               String[] // Yanıt türleri (code, token, id_token)
+  pkceRequired                Boolean  @default(true) // PKCE gerekliliği
+  createdAt                   DateTime @default(now()) // Oluşturulma tarihi
+  updatedAt                   DateTime @updatedAt // Güncellenme tarihi
 
-  // Realm ile ilişkilendirme
-  realmId          String
-  realm            Realm   @relation(fields: [realmId], references: [id])
+  realmId                     String
+  realm                       Realm    @relation(fields: [realmId], references: [id])
 
-  consent          Consent[]
-  authorizedUsers  User[]   @relation("ClientUsers")
-  accessTokens    AccessToken[]
-  idTokens        IDToken[]
+  consent                     Consent[]
+  authorizedUsers             User[]   @relation("ClientUsers")
+  accessTokens                AccessToken[]
+  idTokens                    IDToken[]
+  refreshTokens               RefreshToken[]
+  authorizationCodes          AuthorizationCode[] 
+  activities                  Activity[]
+
+  name                        String // İstemci adı
+  description                 String? // Açıklama (isteğe bağlı)
+  logoUri                     String? // İstemci logosu URL'si
+  ownerEmail                  String // Sahip e-posta adresi
+  allowedScopes               String[] // Yetkilendirilmiş kapsamlar (scopes)
+  firstParty                  Boolean @default(false) // 1. parti istemci mi?
+  isActive                    Boolean @default(true) // İstemcinin aktif olup olmadığı
+  trusted                     Boolean @default(false) // Güvenilir istemci mi?
+  allowedCorsOrigins          String[] // CORS için izin verilen origin'ler
+  postLogoutRedirectUris      String[] // Çıkış sonrası yönlendirme URI'leri
+  requireConsent              Boolean @default(false) // Kullanıcıdan onay istenir mi?
+  tokenEndpointAuthMethod     String @default("client_secret_basic") // OAuth token doğrulama metodu
+  backchannelLogoutUri        String? // Backchannel logout URI'si (isteğe bağlı)
+  backchannelLogoutSessionRequired Boolean @default(false) // Backchannel logout session gerekiyor mu?
+  accessTokenLifetime         Int     @default(3600) // Erişim token süresi (saniye)
+  refreshTokenLifetime        Int     @default(1209600) // Refresh token süresi (14 gün)
+  idTokenLifetime             Int     @default(3600) // ID token süresi (varsayılan 1 saat)
+  deviceCodeLifetime          Int     @default(300) // Device code süresi (varsayılan 5 dakika)
+  requireProofKeyForCodeExchange Boolean @default(false) // PKCE zorunlu mu?
+  requireClientSecret         Boolean @default(true) // İstemcinin client_secret gerektirip gerektirmediği
+  requirePkceForPublicClients Boolean @default(true) // Public client'lar için PKCE zorunluluğu
+  enableRefreshTokenRotation  Boolean @default(false) // Refresh token rotasyonu aktif mi?
+  enableDynamicRegistration   Boolean @default(false) // Dinamik istemci kaydı destekleniyor mu?
+  enforceSignedRequests       Boolean @default(false) // İstemci istekleri imzalanmalı mı?
+  enforceMTLS                 Boolean @default(false) // Mutual TLS zorunluluğu var mı?
+  defaultAcrValues            String[] // Varsayılan Authentication Context Class değerleri
+  sectorIdentifierUri         String? // OpenID Connect Sector Identifier URI
+  jwksUri                     String? // JSON Web Key Set URI
+  softwareId                  String? // Yazılım kimliği (Client Software Identifier)
+  softwareVersion             String? // Yazılım versiyonu
+  authorizationSignedResponseAlg String? // Authorization response imzalama algoritması
+  authorizationEncryptedResponseAlg String? // Authorization response şifreleme algoritması
+  idTokenSignedResponseAlg    String? // ID token imzalama algoritması
+  idTokenEncryptedResponseAlg String? // ID token şifreleme algoritması
+  userInfoSignedResponseAlg   String? // UserInfo endpoint imzalama algoritması
+  userInfoEncryptedResponseAlg String? // UserInfo endpoint şifreleme algoritması
+  introspectionSignedResponseAlg String? // Token introspection imzalama algoritması
+  introspectionEncryptedResponseAlg String? // Token introspection şifreleme algoritması
+  enableImplicitGrant         Boolean @default(false) // Implicit grant izni
+  enableAuthorizationCodeGrant Boolean @default(true) // Authorization Code grant izni
+  enableClientCredentialsGrant Boolean @default(true) // Client Credentials grant izni
+  enablePasswordGrant         Boolean @default(false) // Resource Owner Password grant izni
+  enableDeviceCodeGrant       Boolean @default(false) // Device Code grant izni
+  enableRefreshTokenGrant     Boolean @default(true) // Refresh Token grant izni
+  allowOfflineAccess          Boolean @default(false) // Offline erişim izni
+  trustedIssuer               String? // Güvenilir issuer
+  customClaims                Json? // Özel ek claims
 }
 
 model Realm {
-  id            String   @id @default(uuid()) // UUID olarak id
-  name          String   @unique // Realm adı
-  createdAt     DateTime @default(now()) // Oluşturulma tarihi
-  updatedAt     DateTime @updatedAt // Güncellenme tarihi
-  description   String? // Realm açıklaması (isteğe bağlı)
+  id            String    @id @default(uuid()) // UUID olarak id
+  name          String    @unique // Realm adı
+  createdAt     DateTime  @default(now()) // Oluşturulma tarihi
+  updatedAt     DateTime  @updatedAt // Güncellenme tarihi
+  description   String?   // Realm açıklaması (isteğe bağlı)
+  isActive      Boolean   @default(true) // Realm'in aktif olup olmadığı
+  realmType     String?   // (Opsiyonel) Realm tipi (public, private, vb.)
+  createdBy     String?    // Realm'i oluşturan kullanıcı ID'si
+  updatedBy     String?   // (Opsiyonel) Realm'i güncelleyen kullanıcı ID'si
+  expiresAt     DateTime? // (Opsiyonel) Realm'in geçerlilik süresi
+  metadata      Json?     // (Opsiyonel) Realm'e özel metadata (JSON formatında)
 
-  users         User[]
-  clients       Client[]
-  permissions   Permission[]
+  users         User[]    // Realm'e ait kullanıcılar
+  clients       Client[]  // Realm'e ait istemciler
+  roles         Role[]    // Realm'e ait roller (isteğe bağlı)
 }
 
 model RefreshToken {
   id            String   @id @default(uuid()) // UUID olarak id
   token         String   @unique // Yenileme token'ı
   expiresAt     DateTime // Yenileme token'ının bitiş tarihi
+  createdAt     DateTime @default(now()) // Token oluşturulma zamanı
+  isRevoked     Boolean  @default(false) // Token iptal edilmiş mi?
   userId        String   // Kullanıcı ID'si
-  user          User     @relation(fields: [userId], references: [id])
+  clientId      String   // İstemci ID'si
+  scope         String?  // (Opsiyonel) Token ile ilişkili izinler (scope)
+  metadata      Json?    // (Opsiyonel) Token'a dair ek bilgiler
+  ipAddress     String?  // (Opsiyonel) Token alındığı IP adresi
+  userAgent     String?  // (Opsiyonel) Token alındığı istemci cihaz ve tarayıcı bilgisi
+
+  user          User     @relation(fields: [userId], references: [id]) // Kullanıcı ile ilişki
+  client        Client   @relation(fields: [clientId], references: [id]) // İstemci ile ilişki
 }
 
 model AccessToken {
   id            String   @id @default(uuid()) // UUID olarak id
   token         String   @unique // Erişim token'ı
   expiresAt     DateTime // Erişim token'ının bitiş tarihi
+  createdAt     DateTime @default(now()) // Token oluşturulma zamanı
+  isRevoked     Boolean  @default(false) // Token iptal edilmiş mi?
   userId        String   // Kullanıcı ID'si
   clientId      String   // İstemci ID'si
-  user          User     @relation(fields: [userId], references: [id])
-  client        Client   @relation(fields: [clientId], references: [id])
+  scope         String?  // (Opsiyonel) Token ile ilişkili izinler (scope)
+  metadata      Json?    // (Opsiyonel) Token'a dair ek bilgiler
+  ipAddress     String?  // (Opsiyonel) Token alındığı IP adresi
+  userAgent     String?  // (Opsiyonel) Token alındığı istemci cihaz ve tarayıcı bilgisi
+  expirationReason String? // (Opsiyonel) Token süresinin bitiş sebebi (örn. zaman aşımı, iptal vb.)
+
+  user          User     @relation(fields: [userId], references: [id]) // Kullanıcı ile ilişki
+  client        Client   @relation(fields: [clientId], references: [id]) // İstemci ile ilişki
 }
 
 model IDToken {
   id            String   @id @default(uuid()) // UUID olarak id
   token         String   @unique // ID token'ı
   expiresAt     DateTime // ID token'ının bitiş tarihi
+  createdAt     DateTime @default(now()) // Token oluşturulma zamanı
+  isRevoked     Boolean  @default(false) // Token iptal edilmiş mi?
   userId        String   // Kullanıcı ID'si
   clientId      String   // İstemci ID'si
-  user          User     @relation(fields: [userId], references: [id])
-  client        Client   @relation(fields: [clientId], references: [id])
+  scope         String?  // (Opsiyonel) Token ile ilişkili izinler (scope)
+  metadata      Json?    // (Opsiyonel) Token'a dair ek bilgiler
+  ipAddress     String?  // (Opsiyonel) Token alındığı IP adresi
+  userAgent     String?  // (Opsiyonel) Token alındığı istemci cihaz ve tarayıcı bilgisi
+  expirationReason String? // (Opsiyonel) Token süresinin bitiş sebebi (örn. zaman aşımı, iptal vb.)
+
+  user          User     @relation(fields: [userId], references: [id]) // Kullanıcı ile ilişki
+  client        Client   @relation(fields: [clientId], references: [id]) // İstemci ile ilişki
 }
 
 model Consent {
-  id          String   @id @default(uuid()) // UUID olarak id
-  granted     Boolean  // Onay durumu (true/false)
-  grantedAt   DateTime @default(now()) // Onay tarihi
-  clientId    String   // İstemci ID'si
-  userId      String   // Kullanıcı ID'si
-  client      Client   @relation(fields: [clientId], references: [id])
-  user        User     @relation(fields: [userId], references: [id])
+  id            String   @id @default(uuid()) // UUID olarak id
+  granted       Boolean  // Onay durumu (true/false)
+  grantedAt     DateTime @default(now()) // Onay tarihi
+  expiresAt     DateTime? // (Opsiyonel) Onayın geçerlilik süresi
+  clientId      String   // İstemci ID'si
+  userId        String   // Kullanıcı ID'si
+  scope         String?  // (Opsiyonel) Kullanıcının verdiği izinler (scope)
+  metadata      Json?    // (Opsiyonel) Onayla ilgili ek bilgiler
+  ipAddress     String?  // (Opsiyonel) Onayın alındığı IP adresi
+  userAgent     String?  // (Opsiyonel) Onayın alındığı istemci cihaz ve tarayıcı bilgisi
+  revoked       Boolean  @default(false) // Onay iptal edilmiş mi?
+  reason        String?  // (Opsiyonel) Onayın alınma sebebi (örn. kullanıcı sözleşmesi)
+
+  client        Client   @relation(fields: [clientId], references: [id]) // İstemci ile ilişki
+  user          User     @relation(fields: [userId], references: [id]) // Kullanıcı ile ilişki
 }
 
 model Activity {
-  id        String   @id @default(uuid()) // UUID olarak id
-  action    String   // Etkinlik açıklaması
-  timestamp DateTime @default(now()) // Etkinlik zamanı
-  userId    String   // Kullanıcı ID'si
-  user      User     @relation(fields: [userId], references: [id])
+  id          String   @id @default(uuid()) // UUID olarak id
+  action      String   // Etkinlik açıklaması (örneğin: "login", "update profile", "delete item")
+  activityType String  // Etkinlik türü (örneğin: "login", "logout", "create", "update")
+  timestamp   DateTime @default(now()) // Etkinlik zamanı
+  userId      String   // Kullanıcı ID'si
+  clientId    String?  // (Opsiyonel) Etkinliği gerçekleştiren istemci ID'si
+  sessionId   String?  // (Opsiyonel) Kullanıcı oturumu ID'si
+  metadata    Json?    // (Opsiyonel) Etkinlik hakkında ek bilgiler
+  ipAddress   String?  // (Opsiyonel) Etkinliği gerçekleştiren IP adresi
+  userAgent   String?  // (Opsiyonel) Etkinliği gerçekleştiren istemci cihaz ve tarayıcı bilgisi
+
+  user        User     @relation(fields: [userId], references: [id])
+  client      Client?  @relation(fields: [clientId], references: [id])
 }
 
 model Permission {
-  id        String   @id @default(uuid()) // UUID olarak id
-  name      String   @unique // İzin adı (örneğin: "read", "write", "admin")
-  createdAt DateTime @default(now()) // Oluşturulma tarihi
-  realmId   String
-  realm     Realm   @relation(fields: [realmId], references: [id])
+  id            String   @id @default(uuid()) // İzin kimliği (UUID)
+  name          String   @unique // İzin adı (read, write, admin, vb.)
+  description   String?  // İzin açıklaması
+  createdAt     DateTime @default(now()) // Oluşturulma tarihi
+  updatedAt     DateTime @updatedAt // Güncellenme tarihi
 
-  users     User[]   @relation("UserPermissions")
+  roles         Role[]   @relation("RolePermissions") // İzin verilen roller
+  users         User[]   @relation("UserPermissions") // Kullanıcılara ait izinler
+  
 }
 
-enum UserRole {
+enum RoleType {
   ADMIN
   USER
-  SUPER_ADMIN
+  MODERATOR
+  GUEST
 }
+
+model Role {
+  id            String      @id @default(uuid()) // Rol kimliği (UUID)
+  name          String      @unique // Rol adı (Admin, User, vb.)
+  description   String?     // Rol açıklaması
+  createdAt     DateTime    @default(now()) // Oluşturulma tarihi
+  updatedAt     DateTime    @updatedAt // Güncellenme tarihi
+  permissions   Permission[] @relation("RolePermissions") // Rolün izinleri
+  users         UserRole[]     // Rolün ait olduğu kullanıcılar
+
+  realmId       String      // Rolün ait olduğu Realm ID'si
+  realm         Realm       @relation(fields: [realmId], references: [id]) // Rolün ait olduğu Realm
+}
+
+
+model UserRole {
+  id        String   @id @default(uuid())  // Otomatik UUID ID
+  userId    String   // Kullanıcı ID'si
+  roleId    String   // Rol ID'si
+  user      User     @relation(fields: [userId], references: [id])  // Kullanıcı ile ilişki
+  role      Role     @relation(fields: [roleId], references: [id])  // Rol ile ilişki
+
+  createdAt DateTime @default(now())  // Kullanıcı-rol ilişkisinin oluşturulma zamanı
+  updatedAt DateTime @updatedAt      // Kullanıcı-rol ilişkisinin güncellenme zamanı
+}
+
+
 
 // OAuth Grant Types
 enum GrantType {
